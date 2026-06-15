@@ -1,0 +1,13 @@
+# Fetched at setup time (run ./setup.sh) - not committed
+static/leaflet.js
+static/leaflet.css
+static/chart.js
+static/*.woff2
+
+# Runtime data
+data/
+*.log
+
+# Python
+__pycache__/
+*.pyc

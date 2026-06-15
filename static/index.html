@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Logos Node</title>
+<script>try{document.documentElement.setAttribute('data-theme',localStorage.getItem('logos-theme')||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}</script>
+<link rel="stylesheet" href="/static/leaflet.css">
+<style>
+@font-face{font-family:'Rhymes Display';src:url('/static/RhymesDisplay.woff2') format('woff2');font-weight:400;font-display:swap}
+@font-face{font-family:'Public Sans';src:url('/static/PublicSans.woff2') format('woff2');font-weight:400;font-display:swap}
+@font-face{font-family:'Fira Code';src:url('/static/FiraCode.woff2') format('woff2');font-weight:400;font-display:swap}
+@font-face{font-family:'Fira Code';src:url('/static/FiraCode-SemiBold.woff2') format('woff2');font-weight:600;font-display:swap}
+
+:root,[data-theme="dark"]{
+  --brand:#152521;
+  --bg:#0e1814; --panel:#152521; --panel2:#1d2f29; --line:#2b453d;
+  --txt:#f5f5ef; --muted:#8a9290; --track:#0c1612;
+  --accent:#00a544; --accent2:#5f797c; --warn:#ffd328; --danger:#e5565b; --good:#00a544;
+  --warn-ink:#ffd328;
+  --c-temp:#ffd328; --c-catchup:#00a544; --c-cpu:#5f797c; --c-ram:#c6ebf7; --c-peers:#00a544;
+  --c-threshold:#e5565b; --c-self:#ffd328; --c-boot:#5f797c; --c-peer:#00a544;
+  --grid:#243a33; --tick:#8a9290; --shadow:0 1px 0 rgba(0,0,0,.2);
+}
+[data-theme="light"]{
+  --brand:#152521;
+  --bg:#eceadd; --panel:#f6f5ee; --panel2:#e6e3d3; --line:#d3d6d0;
+  --txt:#152521; --muted:#5f6e69; --track:#dadcd1;
+  --accent:#00a544; --accent2:#5f797c; --warn:#ffd328; --danger:#d23b41; --good:#00843a;
+  --warn-ink:#8a6d00;
+  --c-temp:#b8860b; --c-catchup:#00843a; --c-cpu:#4a6164; --c-ram:#3f8f93; --c-peers:#00843a;
+  --c-threshold:#d23b41; --c-self:#c79a00; --c-boot:#4a6164; --c-peer:#00843a;
+  --grid:#d6d8d0; --tick:#5f6e69; --shadow:0 1px 2px rgba(21,37,33,.06);
+}
+
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;font-family:'Public Sans',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  background:var(--bg);color:var(--txt);-webkit-font-smoothing:antialiased;overflow:hidden;transition:background .25s,color .25s}
+.mono,.num{font-family:'Fira Code',ui-monospace,SFMono-Regular,Menlo,monospace}
+a{color:var(--accent);text-decoration:none}
+.wrap{height:100vh;display:flex;flex-direction:column;padding:11px;gap:9px}
+header{display:flex;align-items:center;gap:11px;flex-wrap:wrap;flex:0 0 auto}
+.brandwrap{display:flex;align-items:center;gap:9px}
+.logomark{height:24px;width:auto;color:var(--accent)}
+.brand{font-family:'Rhymes Display',Georgia,serif;font-size:25px;letter-spacing:.3px;line-height:1}
+.brand span{color:var(--muted)}
+.badge{font-size:11px;font-weight:700;padding:3px 11px;border-radius:999px;letter-spacing:.3px}
+.badge.online{background:rgba(0,165,68,.16);color:var(--good);border:1px solid rgba(0,165,68,.45)}
+.badge.boot{background:rgba(255,211,40,.16);color:var(--warn-ink);border:1px solid rgba(255,211,40,.5)}
+.badge.off{background:rgba(229,86,91,.16);color:var(--danger);border:1px solid rgba(229,86,91,.45)}
+.pill{font-size:11px;padding:3px 9px;border-radius:999px;background:var(--panel2);color:var(--muted);border:1px solid var(--line)}
+.spacer{flex:1}
+.iconbtn{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:999px;background:var(--panel2);color:var(--muted);border:1px solid var(--line);cursor:pointer;padding:0}
+.iconbtn:hover{color:var(--txt);border-color:var(--accent)}
+.ghlink{font-size:11px;padding:3px 10px;border-radius:999px;border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+.ghlink:hover{color:var(--txt);border-color:var(--accent)}
+.upd{font-size:11px;color:var(--muted)}
+.banner{padding:7px 12px;border-radius:9px;font-size:12.5px;display:none;flex:0 0 auto}
+.banner.show{display:block}
+.banner.danger{background:rgba(229,86,91,.13);border:1px solid rgba(229,86,91,.5);color:var(--danger)}
+.banner.warn{background:rgba(255,211,40,.12);border:1px solid rgba(255,211,40,.45);color:var(--warn-ink)}
+
+.grid{flex:1 1 auto;min-height:0;display:grid;gap:9px;
+  grid-template-columns:repeat(12,1fr);
+  grid-template-rows:minmax(0,.86fr) minmax(0,1.14fr)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;box-shadow:var(--shadow);
+  min-height:0;display:flex;flex-direction:column;overflow:hidden}
+.card h3{margin:0 0 9px;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);font-weight:700;flex:0 0 auto}
+.sync{grid-column:1/6;grid-row:1}
+.hw{grid-column:6/9;grid-row:1}
+.side{grid-column:9/13;grid-row:1}
+.chart{grid-column:1/6;grid-row:2}
+.map{grid-column:6/13;grid-row:2}
+@media(max-width:1000px){
+  body{overflow:auto}.wrap{height:auto}.grid{display:block}.card{margin-bottom:9px}#map{height:300px}
+}
+
+.syncwrap{display:flex;gap:16px;align-items:center;flex:1;min-height:0}
+.ring{--p:0;--c:var(--accent);width:120px;height:120px;border-radius:50%;flex:0 0 auto;
+  background:conic-gradient(var(--c) calc(var(--p)*1%),var(--track) 0);display:flex;align-items:center;justify-content:center;position:relative}
+.ring::before{content:"";position:absolute;inset:10px;border-radius:50%;background:var(--panel)}
+.ring .inner{position:relative;text-align:center}
+.ring .pct{font-family:'Fira Code',monospace;font-size:24px;font-weight:600}
+.ring .lab{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+.syncright{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center}
+.behind{font-size:14px;margin-bottom:10px}
+.syncstats{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.stat .k{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px}
+.stat .v{font-family:'Fira Code',monospace;font-size:18px;font-weight:600;margin-top:1px;white-space:nowrap}
+.stat .v small{font-size:11px;color:var(--muted);font-weight:400}
+
+.gauges{display:grid;grid-template-columns:1fr 1fr;gap:11px}
+.gauge{display:flex;align-items:center;gap:9px;min-width:0}
+.gg{--p:0;--c:var(--accent);width:54px;height:54px;border-radius:50%;flex:0 0 auto;
+  background:conic-gradient(var(--c) calc(var(--p)*1%),var(--track) 0);position:relative;display:flex;align-items:center;justify-content:center}
+.gg::before{content:"";position:absolute;inset:6px;border-radius:50%;background:var(--panel)}
+.gg span{position:relative;font-family:'Fira Code',monospace;font-size:11px;font-weight:600}
+.gauge .gl{font-size:11px;color:var(--muted)}
+.gauge .gv{font-family:'Fira Code',monospace;font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rows{display:flex;flex-direction:column;gap:6px}
+.row{display:flex;justify-content:space-between;font-size:13px;align-items:center;gap:8px}
+.row .k{color:var(--muted)}
+.row .v{font-family:'Fira Code',monospace;font-weight:600;white-space:nowrap}
+
+.subh{font-size:10px;letter-spacing:1.4px;text-transform:uppercase;color:var(--muted);font-weight:700;margin:2px 0 7px}
+.side .sep{height:1px;background:var(--line);margin:11px 0}
+.wkey{display:flex;justify-content:space-between;align-items:center;padding:5px 0}
+.wkey .id{font-family:'Fira Code',monospace;font-size:12px}
+.wkey .vchip{font-size:9px;color:var(--accent);border:1px solid rgba(0,165,68,.4);border-radius:5px;padding:1px 4px;margin-left:5px}
+.wbal{font-family:'Fira Code',monospace;font-size:15px;font-weight:600}
+.wstat{font-size:10px;padding:2px 7px;border-radius:999px;margin-left:7px}
+.wstat.ok{background:rgba(0,165,68,.16);color:var(--good)}
+.wstat.syncing{background:rgba(255,211,40,.16);color:var(--warn-ink)}
+.wstat.unfunded{background:var(--panel2);color:var(--muted)}
+
+.charthead{display:flex;align-items:center;gap:6px;margin-bottom:8px;flex:0 0 auto;flex-wrap:wrap}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{font-size:11px;padding:3px 11px;border-radius:999px;background:var(--panel2);color:var(--muted);border:1px solid var(--line);cursor:pointer;font-family:inherit}
+.chip.on{background:rgba(0,165,68,.16);color:var(--accent);border-color:rgba(0,165,68,.5)}
+.chartbox{flex:1;min-height:0;position:relative}
+#map{flex:1;min-height:0;border-radius:11px;overflow:hidden;background:var(--track)}
+.leaflet-popup-content-wrapper,.leaflet-popup-tip{background:var(--panel);color:var(--txt)}
+.leaflet-popup-content-wrapper{border:1px solid var(--line)}
+.legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:7px;font-size:11px;color:var(--muted);flex:0 0 auto}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:4px;vertical-align:middle}
+.countries{margin-top:5px;font-size:11.5px;color:var(--muted);flex:0 0 auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brandwrap">
+      <svg class="logomark" viewBox="0 0 20 26" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M14.6386 26C13.728 26 12.945 25.7854 12.2881 25.3549C11.6312 24.9244 11.1344 24.2467 10.7962 23.3233C10.5841 22.7003 10.4359 21.9368 10.3513 21.0328C10.2668 20.1302 10.2134 19.1833 10.1926 18.1948C10.1718 17.1842 10.1497 16.2061 10.1289 15.2592C10.1289 15.0017 10.0651 14.8716 9.93897 14.8716C9.83361 14.8716 9.72695 14.9575 9.62159 15.1292C9.21967 15.8822 8.74359 16.742 8.19208 17.7097C7.66268 18.6773 7.13328 19.645 6.60388 20.6127C6.07447 21.5804 5.5984 22.4518 5.17436 23.2257C4.77243 23.9788 4.48627 24.5264 4.31717 24.871C4.10515 25.3445 3.76696 25.6449 3.3013 25.7737C2.85644 25.9246 2.29582 25.9571 1.61814 25.8699C0.940452 25.7841 0.464381 25.5149 0.188624 25.0635C-0.107945 24.5901 -0.0546142 24.0958 0.347315 23.5795C0.623072 23.2348 1.01459 22.7198 1.52188 22.0317C2.03047 21.3216 2.6015 20.5269 3.23626 19.645C3.87102 18.7424 4.51749 17.8176 5.17306 16.8707C5.85075 15.9031 6.48551 14.9783 7.07865 14.0964C7.67178 13.1938 8.16867 12.4082 8.5706 11.7423C8.99464 11.0542 9.26909 10.5483 9.39657 10.2257C9.52404 9.92526 9.66062 9.591 9.8089 9.22551C9.95719 8.86003 10.0313 8.48414 10.0313 8.09655C10.0313 6.67754 9.89345 5.61231 9.61899 4.90345C9.36535 4.17249 9.01545 3.68864 8.5706 3.45193C8.14655 3.1944 7.68089 3.06433 7.1736 3.06433C6.79248 3.06433 6.38015 3.13977 5.9353 3.29065C5.51125 3.44152 5.2368 3.58069 5.10933 3.70945C4.87649 3.94617 4.65407 3.98909 4.44205 3.83822C4.23002 3.68734 4.16629 3.44022 4.25214 3.09685C4.48497 2.30085 4.90901 1.592 5.52296 0.967684C6.13951 0.322561 6.9967 0 8.09713 0C9.26129 0 10.1822 0.332967 10.8599 1.0002C11.5376 1.66743 12.0241 2.73137 12.3206 4.1933C12.6172 5.65523 12.7655 7.5906 12.7655 9.9994C12.7655 12.8374 12.8084 15.1071 12.893 16.8057C12.9775 18.5044 13.1154 19.7842 13.3053 20.6439C13.4952 21.4828 13.7606 22.0421 14.0987 22.3218C14.459 22.6014 14.9026 22.7406 15.432 22.7406C15.9614 22.7406 16.4167 22.6326 16.8615 22.418C17.3272 22.2034 17.7291 21.9238 18.0686 21.5791C18.2169 21.4074 18.386 21.3424 18.5772 21.3853C18.7671 21.4282 18.9154 21.5466 19.022 21.7404C19.1495 21.9121 19.1495 22.1384 19.022 22.418C18.5772 23.4078 17.9841 24.2571 17.2439 24.966C16.5246 25.654 15.6557 25.9987 14.6399 25.9987L14.6386 26Z"/></svg>
+      <div class="brand">Logos <span>Node</span></div>
+    </div>
+    <span id="mode" class="badge off">connecting…</span>
+    <span class="pill mono" id="peerid">peer …</span>
+    <span class="pill" id="ver">v—</span>
+    <span class="pill" id="up">uptime —</span>
+    <div class="spacer"></div>
+    <button id="themeBtn" class="iconbtn" onclick="toggleTheme()" title="Toggle theme"></button>
+    <a class="ghlink" href="https://github.com/fspseva" target="_blank" rel="noopener">built by github.com/fspseva ↗</a>
+    <div class="upd" id="upd">—</div>
+  </header>
+
+  <div id="bThrottle" class="banner danger"></div>
+  <div id="bNode" class="banner warn"></div>
+
+  <div class="grid">
+    <div class="card sync">
+      <h3>Chain sync</h3>
+      <div class="syncwrap">
+        <div class="ring" id="ring"><div class="inner">
+          <div class="pct" id="pct">—</div><div class="lab">synced</div>
+        </div></div>
+        <div class="syncright">
+          <div class="behind" id="behind">—</div>
+          <div class="syncstats">
+            <div class="stat"><div class="k">Block height</div><div class="v" id="height">—</div></div>
+            <div class="stat"><div class="k">Tip slot</div><div class="v" id="slot">—</div></div>
+            <div class="stat"><div class="k">Catch-up speed</div><div class="v" id="rate">—</div></div>
+            <div class="stat"><div class="k">Est. time left</div><div class="v" id="eta">—</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card hw">
+      <h3>Raspberry Pi health</h3>
+      <div class="gauges">
+        <div class="gauge"><div class="gg" id="gTemp"><span id="tTemp">—</span></div>
+          <div style="min-width:0"><div class="gl">Temp</div><div class="gv" id="vTemp">—</div></div></div>
+        <div class="gauge"><div class="gg" id="gCpu"><span id="tCpu">—</span></div>
+          <div style="min-width:0"><div class="gl">CPU</div><div class="gv" id="vCpu">—</div></div></div>
+        <div class="gauge"><div class="gg" id="gMem"><span id="tMem">—</span></div>
+          <div style="min-width:0"><div class="gl">RAM</div><div class="gv" id="vMem">—</div></div></div>
+        <div class="gauge"><div class="gg" id="gDisk"><span id="tDisk">—</span></div>
+          <div style="min-width:0"><div class="gl">Disk</div><div class="gv" id="vDisk">—</div></div></div>
+      </div>
+      <div class="rows" style="margin-top:auto;padding-top:10px">
+        <div class="row"><span class="k">Load 1/5/15m</span><span class="v" id="load">—</span></div>
+        <div class="row"><span class="k">Node process</span><span class="v" id="proc">—</span></div>
+      </div>
+    </div>
+
+    <div class="card side">
+      <div class="subh">Network</div>
+      <div class="rows">
+        <div class="row"><span class="k">Connected peers</span><span class="v" id="peers">—</span></div>
+        <div class="row"><span class="k">Connections</span><span class="v" id="conns">—</span></div>
+        <div class="row"><span class="k">Pending</span><span class="v" id="pending">—</span></div>
+        <div class="row"><span class="k">Throughput</span><span class="v" id="net">—</span></div>
+      </div>
+      <div class="sep"></div>
+      <div class="subh">Wallet</div>
+      <div id="wallet" class="rows"></div>
+    </div>
+
+    <div class="card chart">
+      <div class="charthead"><div class="chips" id="chips"></div></div>
+      <div class="chartbox"><canvas id="chart"></canvas></div>
+    </div>
+
+    <div class="card map">
+      <h3>The network around you &mdash; <span id="peerCount">0</span> peers met</h3>
+      <div id="map"></div>
+      <div class="legend">
+        <span><span class="dot" style="background:var(--c-self)"></span>This node</span>
+        <span><span class="dot" style="background:var(--c-boot)"></span>Bootstrap peer</span>
+        <span><span class="dot" style="background:var(--c-peer)"></span>Network peer</span>
+      </div>
+      <div class="countries" id="countries"></div>
+    </div>
+  </div>
+</div>
+
+<script src="/static/leaflet.js"></script>
+<script src="/static/chart.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const cssVar = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim() || '#888';
+if(window.Chart){ Chart.defaults.font.family="'Public Sans',system-ui,sans-serif"; }
+const fmtInt = n => (n==null?'—':Number(n).toLocaleString('en-US'));
+function fmtBytes(b){ if(b==null) return '—'; const u=['B','KB','MB','GB','TB']; let i=0;
+  while(b>=1024&&i<u.length-1){b/=1024;i++} return b.toFixed(b<10&&i>0?1:0)+' '+u[i]; }
+function fmtRate(bps){ if(bps==null) return '—'; return fmtBytes(bps)+'/s'; }
+function fmtDur(s){ if(s==null) return '—'; s=Math.round(s);
+  if(s<60) return s+'s'; const m=Math.floor(s/60); if(m<60) return m+'m '+(s%60)+'s';
+  const h=Math.floor(m/60); if(h<24) return h+'h '+(m%60)+'m';
+  const d=Math.floor(h/24); return d+'d '+(h%24)+'h'; }
+function gaugeColor(p,warn,danger){ if(p>=danger) return 'var(--danger)'; if(p>=warn) return 'var(--warn)'; return 'var(--accent)'; }
+function setGauge(g,t,v,pct,label,warn=70,danger=88){
+  pct=Math.max(0,Math.min(100,pct||0));
+  const c=gaugeColor(pct,warn,danger); g.style.setProperty('--p',pct); g.style.setProperty('--c',c);
+  t.textContent=Math.round(pct)+'%'; v.textContent=label;
+}
+
+/* ---- theme ---- */
+const SUN='<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5 5l1.4 1.4M17.6 17.6L19 19M19 5l-1.4 1.4M6.4 17.6L5 19"/></svg>';
+const MOON='<svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z"/></svg>';
+function applyTheme(t){
+  document.documentElement.setAttribute('data-theme',t);
+  try{localStorage.setItem('logos-theme',t);}catch(e){}
+  $('themeBtn').innerHTML = (t==='dark')?SUN:MOON;
+  $('themeBtn').title = (t==='dark')?'Switch to light mode':'Switch to dark mode';
+  if(map && tiles){ tiles.remove(); tiles=L.tileLayer(tileUrl(),{maxZoom:8,minZoom:1}).addTo(map); }
+  if(chart){ chartMetric=null; drawChart(); }
+  if(lastPeers) renderPeers(lastPeers);
+}
+function toggleTheme(){ applyTheme((document.documentElement.getAttribute('data-theme')||'dark')==='dark'?'light':'dark'); }
+
+async function getState(){
+  try{ render(await (await fetch('/api/state')).json()); }
+  catch(e){ $('mode').className='badge off'; $('mode').textContent='dashboard offline'; }
+}
+function render(s){
+  const n=s.node||{}, sy=s.sync||{}, nw=s.network||{}, sys=s.system||{};
+  const mb=$('mode');
+  if(!n.reachable){ mb.className='badge off'; mb.textContent='node unreachable'; }
+  else if(sy.caught_up){ mb.className='badge online'; mb.textContent='● ONLINE / IN SYNC'; }
+  else if(n.mode==='Online'){ mb.className='badge boot'; mb.textContent='CATCHING UP'; }
+  else { mb.className='badge boot'; mb.textContent=(n.mode||'syncing').toUpperCase(); }
+
+  $('peerid').textContent = nw.peer_id ? 'peer '+nw.peer_id.slice(0,8)+'…'+nw.peer_id.slice(-4) : 'peer …';
+  $('ver').textContent = 'v'+(s.version||'—');
+  $('up').textContent = 'uptime '+fmtDur(sys.uptime_s);
+  $('upd').textContent = 'updated '+new Date((s.ts||0)*1000).toLocaleTimeString();
+
+  const tf=sys.throttle_flags||{};
+  const thrNow = tf.throttled_now||tf.soft_temp_limit_now||tf.freq_capped_now||tf.under_voltage_now;
+  const bt=$('bThrottle');
+  if(thrNow){ bt.className='banner danger show';
+    bt.innerHTML='⚠ <b>Throttling now.</b> The Pi is limiting CPU speed'+
+      (tf.soft_temp_limit_now||tf.throttled_now?' because it is too hot ('+(sys.temp_c||'?')+'°C)':'')+
+      (tf.under_voltage_now?' and is under-volting (weak power supply)':'')+'. Add active cooling.';
+  } else if(tf.throttled_since_boot||tf.soft_temp_limit_since_boot){
+    bt.className='banner warn show';
+    bt.innerHTML='Note: the Pi throttled due to heat since boot. Better cooling will speed up future syncs.';
+  } else bt.className='banner';
+
+  const bn=$('bNode');
+  if(!n.reachable){ bn.className='banner danger show'; bn.textContent='The node API is not responding on :8080. Is the logos-node service running?'; }
+  else bn.className='banner';
+
+  const pct=sy.percent;
+  $('ring').style.setProperty('--p', pct!=null?pct:0);
+  $('ring').style.setProperty('--c', sy.caught_up?'var(--good)':'var(--accent2)');
+  $('pct').textContent = pct!=null ? (pct>=99.99?'100':pct.toFixed(pct<99?1:2))+'%' : '—';
+  $('height').innerHTML = fmtInt(n.height);
+  $('slot').innerHTML = fmtInt(n.slot)+' <small>/ '+fmtInt(sy.live_slot)+'</small>';
+  $('rate').innerHTML = sy.slot_rate!=null ? fmtInt(Math.round(sy.slot_rate))+' <small>slots/s</small>' : '—';
+  $('eta').textContent = sy.caught_up ? 'caught up' : (sy.eta_seconds!=null?'~'+fmtDur(sy.eta_seconds):'measuring…');
+  const beh=$('behind');
+  if(sy.caught_up){ beh.innerHTML='<span style="color:var(--good)">✔ Following the live chain</span>'; }
+  else if(sy.seconds_behind!=null){ beh.innerHTML='<b style="color:var(--warn-ink)">'+fmtDur(sy.seconds_behind)+'</b> behind the live network'; }
+  else beh.textContent='—';
+
+  $('peers').textContent=fmtInt(nw.n_peers);
+  $('conns').textContent=fmtInt(nw.n_connections);
+  $('pending').textContent=fmtInt(nw.n_pending);
+  $('net').innerHTML='↓'+fmtRate(sys.net_rx_rate)+' &nbsp; ↑'+fmtRate(sys.net_tx_rate);
+
+  const temp=sys.temp_c;
+  setGauge($('gTemp'),$('tTemp'),$('vTemp'), temp!=null?temp:0, temp!=null?temp+'°C':'—', 70,80);
+  $('vTemp').textContent = temp!=null?temp+'°C':'—';
+  setGauge($('gCpu'),$('tCpu'),$('vCpu'), sys.cpu_percent||0, (sys.cpu_percent!=null?sys.cpu_percent+'%':'—'),75,92);
+  const memPct = sys.mem_total?100*sys.mem_used/sys.mem_total:0;
+  setGauge($('gMem'),$('tMem'),$('vMem'), memPct, fmtBytes(sys.mem_used),80,93);
+  const diskPct = sys.disk_total?100*sys.disk_used/sys.disk_total:0;
+  setGauge($('gDisk'),$('tDisk'),$('vDisk'), diskPct, fmtBytes(sys.disk_used),80,93);
+  $('load').textContent = sys.load1!=null?[sys.load1,sys.load5,sys.load15].join('  '):'—';
+  $('proc').innerHTML = (sys.node_cpu!=null?sys.node_cpu+'% CPU':'—')+' &nbsp; '+fmtBytes(sys.node_mem);
+
+  const w=$('wallet'); w.innerHTML='';
+  (s.wallet||[]).forEach(k=>{
+    const div=document.createElement('div'); div.className='wkey';
+    const stat=k.status||'syncing';
+    const bal = k.balance!=null ? fmtInt(k.balance) : '—';
+    div.innerHTML='<div class="id">'+k.short+'…'+(k.is_voucher?'<span class="vchip">voucher</span>':'')+'</div>'+
+      '<div><span class="wbal">'+bal+'</span><span class="wstat '+stat+'">'+stat+'</span></div>';
+    w.appendChild(div);
+  });
+  if(!(s.wallet||[]).length) w.innerHTML='<div class="row"><span class="k">No keys found</span></div>';
+}
+
+function hexA(hex,a){const n=parseInt(hex.slice(1),16);return 'rgba('+((n>>16)&255)+','+((n>>8)&255)+','+(n&255)+','+a+')';}
+const METRICS={
+  temp:{short:'Temp',label:'Temperature (°C)',color:'--c-temp',get:x=>x.temp,thresh:80,threshLabel:'throttle 80°C',seg:true},
+  catchup:{short:'Catch-up',label:'Minutes behind live',color:'--c-catchup',get:x=>x.seconds_behind!=null?+(x.seconds_behind/60).toFixed(2):null},
+  cpu:{short:'CPU',label:'CPU load (%)',color:'--c-cpu',get:x=>x.cpu,max:100},
+  ram:{short:'RAM',label:'RAM used (%)',color:'--c-ram',get:x=>x.mem_pct,max:100},
+  peers:{short:'Peers',label:'Connected peers',color:'--c-peers',get:x=>x.n_peers},
+};
+let activeMetric='temp', chart, chartMetric=null, HIST=[];
+function buildChips(){
+  const c=$('chips'); c.innerHTML='';
+  Object.entries(METRICS).forEach(([k,m])=>{
+    const b=document.createElement('button');
+    b.className='chip'+(k===activeMetric?' on':''); b.textContent=m.short;
+    b.onclick=()=>{activeMetric=k; buildChips(); drawChart();};
+    c.appendChild(b);
+  });
+}
+async function getHistory(){ try{ HIST=await (await fetch('/api/history')).json(); drawChart(); }catch(e){} }
+function drawChart(){
+  const m=METRICS[activeMetric]; const now=Date.now()/1000;
+  const col=cssVar(m.color), thr=cssVar('--c-threshold'), grid=cssVar('--grid'), tick=cssVar('--tick');
+  const pts=HIST.map(x=>({x:+((x.t-now)/60).toFixed(2),y:m.get(x),thr:x.thr||0})).filter(p=>p.y!=null);
+  const ds=[{label:m.label,data:pts,borderColor:col,backgroundColor:hexA(col,.13),
+    fill:true,tension:.25,pointRadius:0,borderWidth:2,
+    segment:m.seg?{borderColor:ctx=>((ctx.p0.raw&&ctx.p0.raw.thr)||(ctx.p1.raw&&ctx.p1.raw.thr)||ctx.p1.parsed.y>=m.thresh)?thr:col}:undefined}];
+  if(m.thresh && pts.length){
+    const xs=pts.map(p=>p.x), x0=Math.min(...xs), x1=Math.max(...xs);
+    ds.push({label:m.threshLabel,data:[{x:x0,y:m.thresh},{x:x1,y:m.thresh}],
+      borderColor:thr,borderDash:[5,4],borderWidth:1.3,pointRadius:0,fill:false});
+  }
+  if(chart && chartMetric===activeMetric){ chart.data.datasets=ds;
+    chart.options.scales.x.grid.color=grid; chart.options.scales.y.grid.color=grid;
+    chart.options.scales.x.ticks.color=chart.options.scales.y.ticks.color=tick;
+    chart.update('none'); return; }
+  if(chart) chart.destroy();
+  chartMetric=activeMetric;
+  chart=new Chart($('chart').getContext('2d'),{type:'line',data:{datasets:ds},
+    options:{responsive:true,maintainAspectRatio:false,animation:false,parsing:false,
+      scales:{x:{type:'linear',ticks:{color:tick,maxTicksLimit:7,callback:v=>Math.round(v)+'m'},grid:{color:grid},title:{display:true,text:'minutes ago',color:tick}},
+        y:{beginAtZero:true,...(m.max?{suggestedMax:m.max}:{}),ticks:{color:tick},grid:{color:grid},title:{display:true,text:m.label,color:tick}}},
+      plugins:{legend:{display:false}}}});
+}
+
+let map, layer, tiles, lastPeers=null;
+function tileUrl(){ return (document.documentElement.getAttribute('data-theme')==='light')
+  ? 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
+  : 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'; }
+async function getPeers(){ try{ lastPeers=await (await fetch('/api/peers')).json(); renderPeers(lastPeers); }catch(e){} }
+function renderPeers(d){
+  $('peerCount').textContent=d.count;
+  if(!map){
+    map=L.map('map',{worldCopyJump:true,attributionControl:false}).setView([25,5],2);
+    tiles=L.tileLayer(tileUrl(),{maxZoom:8,minZoom:1}).addTo(map);
+    setTimeout(()=>map.invalidateSize(),200);
+  }
+  if(layer) layer.remove();
+  layer=L.layerGroup().addTo(map);
+  const cs=cssVar('--c-self'), cb=cssVar('--c-boot'), cp=cssVar('--c-peer'); const counts={};
+  d.peers.forEach(p=>{
+    const color=p.is_self?cs:(p.is_bootstrap?cb:cp);
+    const r=p.is_self?7:5;
+    L.circleMarker([p.lat,p.lon],{radius:r,color:color,weight:p.is_self?2:1,fillColor:color,fillOpacity:.8}).addTo(layer)
+      .bindPopup('<b>'+(p.is_self?'This node':(p.is_bootstrap?'Bootstrap peer':'Peer'))+'</b><br>'+
+        (p.city?p.city+', ':'')+(p.country||'')+'<br><span style="color:var(--muted)">'+(p.isp||'')+'</span><br><span style="font-family:Fira Code,monospace">'+p.ip+'</span>');
+    if(p.country&&!p.is_self) counts[p.country]=(counts[p.country]||0)+1;
+  });
+  const top=Object.entries(counts).sort((a,b)=>b[1]-a[1]);
+  $('countries').innerHTML = top.length? 'By country: '+top.map(c=>c[0]+' ('+c[1]+')').join(' · ') : '';
+}
+
+window.addEventListener('resize',()=>{ if(map) map.invalidateSize(); });
+applyTheme(document.documentElement.getAttribute('data-theme')||'dark');
+buildChips();
+getState(); getHistory(); getPeers();
+setInterval(getState,3000);
+setInterval(getHistory,5000);
+setInterval(getPeers,60000);
+</script>
+</body>
+</html>
