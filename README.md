@@ -24,6 +24,8 @@ Built by [@fspseva](https://github.com/fspseva). MIT licensed.
 - **Network** — connected peers, connections, pending, and live throughput.
 - **Wallet** — each of your node's keys with its balance and status.
 - **World map** — every peer your node has met, geolocated and plotted, with your own node highlighted. A sense of the global network from your living room.
+- **Uptime leaderboard standing** — your node's rank on [leaderboard.logos.live](https://leaderboard.logos.live), shown above the map: your country, rank and percentile, uptime %, and hours tracked, with a **7d / 30d** toggle. Looked up by your node's own peer ID.
+- **Copy buttons** — one-click copy for your full peer ID (in the header) and each wallet address.
 
 Everything is **real data** pulled from the node's local API and the Pi's own sensors. No mock data, no external dashboards.
 
@@ -32,7 +34,7 @@ Everything is **real data** pulled from the node's local API and the Pi's own se
 - A running **Logos node** with its HTTP API reachable (default `http://localhost:8080`). See the official guide: [Run a Logos node from the CLI](https://github.com/logos-co/logos-docs/blob/main/docs/blockchain/get-started/run-a-logos-blockchain-node-from-cli.md).
 - **Python 3** (standard library only — no `pip install` needed).
 - For the world map, the user running the dashboard needs to be able to read the node's logs (`journalctl -u logos-node`). On Raspberry Pi OS the default user can; otherwise add it to the `adm`/`systemd-journal` group.
-- Internet access on the host (to geolocate peer IPs via [ip-api.com](https://ip-api.com) and to fetch the front-end assets once).
+- Internet access on the host (to geolocate peer IPs via [ip-api.com](https://ip-api.com), to fetch your leaderboard standing from [leaderboard.logos.live](https://leaderboard.logos.live), and to fetch the front-end assets once).
 
 ## Install
 
@@ -101,7 +103,7 @@ The sync percentage and ETA are computed from the testnet's genesis time and slo
 
 ## How it works
 
-`dashboard.py` is a single Python file using only the standard library. A background thread polls the node API and the Pi's `/proc`, `vcgencmd`, and `df` every few seconds, keeps a rolling time-series (persisted to `data/`), and scrapes peer IPs from the node's logs to geolocate them (cached, so geolocation runs at most once per IP). It serves a small JSON API (`/api/state`, `/api/history`, `/api/peers`) and a single static page. The front end is vanilla JavaScript with Leaflet for the map and Chart.js for the timeline.
+`dashboard.py` is a single Python file using only the standard library. A background thread polls the node API and the Pi's `/proc`, `vcgencmd`, and `df` every few seconds, keeps a rolling time-series (persisted to `data/`), and scrapes peer IPs from the node's logs to geolocate them (cached, so geolocation runs at most once per IP). It also periodically fetches the [uptime leaderboard](https://leaderboard.logos.live) source data and looks up this node's standing by peer ID. It serves a small JSON API (`/api/state`, `/api/history`, `/api/peers`, `/api/leaderboard`) and a single static page. The front end is vanilla JavaScript with Leaflet for the map and Chart.js for the timeline.
 
 ## Themes
 
