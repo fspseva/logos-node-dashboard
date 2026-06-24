@@ -53,6 +53,10 @@ header{display:flex;align-items:center;gap:11px;flex-wrap:wrap;flex:0 0 auto}
 .spacer{flex:1}
 .iconbtn{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:999px;background:var(--panel2);color:var(--muted);border:1px solid var(--line);cursor:pointer;padding:0}
 .iconbtn:hover{color:var(--txt);border-color:var(--accent)}
+.pillgroup{display:inline-flex;align-items:center;gap:4px}
+.copybtn{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:6px;background:transparent;color:var(--muted);border:1px solid transparent;cursor:pointer;padding:0;flex:0 0 auto;vertical-align:middle}
+.copybtn:hover{color:var(--txt);background:var(--panel2);border-color:var(--line)}
+.copybtn.copied{color:var(--good);border-color:transparent;background:transparent}
 .ghlink{font-size:11px;padding:3px 10px;border-radius:999px;border:1px solid var(--line);color:var(--muted);white-space:nowrap}
 .ghlink:hover{color:var(--txt);border-color:var(--accent)}
 .upd{font-size:11px;color:var(--muted)}
@@ -125,6 +129,16 @@ header{display:flex;align-items:center;gap:11px;flex-wrap:wrap;flex:0 0 auto}
 .legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:7px;font-size:11px;color:var(--muted);flex:0 0 auto}
 .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:4px;vertical-align:middle}
 .countries{margin-top:5px;font-size:11.5px;color:var(--muted);flex:0 0 auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.maphead{flex:0 0 auto;margin-bottom:8px}
+.maphead h3{margin:0 0 6px}
+.standing{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:11.5px;color:var(--muted);line-height:1.5}
+.wtoggle{display:inline-flex;gap:3px;flex:0 0 auto}
+.wbtn{font-size:10px;padding:2px 8px;border-radius:999px;background:var(--panel2);color:var(--muted);border:1px solid var(--line);cursor:pointer;font-family:inherit}
+.wbtn.on{background:rgba(0,165,68,.16);color:var(--accent);border-color:rgba(0,165,68,.5)}
+.standing .st b{color:var(--txt);font-weight:600}
+.standing .st .sep{color:var(--line);margin:0 5px}
+.standing a.lblink{font-size:11px;padding:2px 9px;border-radius:999px;border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+.standing a.lblink:hover{color:var(--txt);border-color:var(--accent)}
 </style>
 </head>
 <body>
@@ -135,7 +149,7 @@ header{display:flex;align-items:center;gap:11px;flex-wrap:wrap;flex:0 0 auto}
       <div class="brand">Logos <span>Node</span></div>
     </div>
     <span id="mode" class="badge off">connecting…</span>
-    <span class="pill mono" id="peerid">peer …</span>
+    <span class="pillgroup"><span class="pill mono" id="peerid">peer …</span><button id="peeridCopy" class="copybtn" type="button" title="Copy full peer ID" style="display:none"></button></span>
     <span class="pill" id="ver">v—</span>
     <span class="pill" id="up">uptime —</span>
     <div class="spacer"></div>
@@ -203,7 +217,14 @@ header{display:flex;align-items:center;gap:11px;flex-wrap:wrap;flex:0 0 auto}
     </div>
 
     <div class="card map">
-      <h3>The network around you &mdash; <span id="peerCount">0</span> peers met</h3>
+      <div class="maphead">
+        <h3>The network around you &mdash; <span id="peerCount">0</span> peers met</h3>
+        <div class="standing">
+          <span class="wtoggle" id="lbWin"><button type="button" class="wbtn on" data-w="7d">7d</button><button type="button" class="wbtn" data-w="30d">30d</button></span>
+          <span class="st" id="stText">checking leaderboard…</span>
+          <a class="lblink" id="lbLink" href="https://leaderboard.logos.live" target="_blank" rel="noopener">leaderboard ↗</a>
+        </div>
+      </div>
       <div id="map"></div>
       <div class="legend">
         <span><span class="dot" style="background:var(--c-self)"></span>This node</span>
@@ -219,6 +240,12 @@ header{display:flex;align-items:center;gap:11px;flex-wrap:wrap;flex:0 0 auto}
 <script src="/static/chart.js"></script>
 <script>
 const $ = id => document.getElementById(id);
+let fullPeerId=null;
+let lbWindow='7d', lastLB=null;
+let regionNames=null;
+try{ regionNames=new Intl.DisplayNames(['en'],{type:'region'}); }catch(e){}
+const MEDALS={gold:'🥇',silver:'🥈',bronze:'🥉'};
+function countryName(cc){ if(!cc) return null; try{ return (regionNames&&regionNames.of(cc))||cc; }catch(e){ return cc; } }
 const cssVar = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim() || '#888';
 if(window.Chart){ Chart.defaults.font.family="'Public Sans',system-ui,sans-serif"; }
 const fmtInt = n => (n==null?'—':Number(n).toLocaleString('en-US'));
@@ -234,6 +261,31 @@ function setGauge(g,t,v,pct,label,warn=70,danger=88){
   pct=Math.max(0,Math.min(100,pct||0));
   const c=gaugeColor(pct,warn,danger); g.style.setProperty('--p',pct); g.style.setProperty('--c',c);
   t.textContent=Math.round(pct)+'%'; v.textContent=label;
+}
+
+/* ---- copy to clipboard ---- */
+const COPY='<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>';
+const CHECK='<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 6.5"/></svg>';
+async function copyText(text,btn){
+  if(!text) return;
+  let ok=false;
+  try{
+    if(navigator.clipboard && window.isSecureContext){
+      await navigator.clipboard.writeText(text); ok=true;
+    }else{
+      const ta=document.createElement('textarea');
+      ta.value=text; ta.style.position='fixed'; ta.style.top='-9999px'; ta.style.opacity='0';
+      document.body.appendChild(ta); ta.focus(); ta.select();
+      ok=document.execCommand('copy'); document.body.removeChild(ta);
+    }
+  }catch(e){ ok=false; }
+  if(btn){
+    btn.innerHTML=ok?CHECK:COPY;
+    btn.classList.toggle('copied',ok);
+    btn.title=ok?'Copied!':btn.dataset.title||btn.title;
+    clearTimeout(btn._t);
+    btn._t=setTimeout(()=>{ btn.innerHTML=COPY; btn.classList.remove('copied'); if(btn.dataset.title) btn.title=btn.dataset.title; },1200);
+  }
 }
 
 /* ---- theme ---- */
@@ -263,6 +315,8 @@ function render(s){
   else { mb.className='badge boot'; mb.textContent=(n.mode||'syncing').toUpperCase(); }
 
   $('peerid').textContent = nw.peer_id ? 'peer '+nw.peer_id.slice(0,8)+'…'+nw.peer_id.slice(-4) : 'peer …';
+  fullPeerId = nw.peer_id || null;
+  $('peeridCopy').style.display = fullPeerId ? '' : 'none';
   $('ver').textContent = 'v'+(s.version||'—');
   $('up').textContent = 'uptime '+fmtDur(sys.uptime_s);
   $('upd').textContent = 'updated '+new Date((s.ts||0)*1000).toLocaleTimeString();
@@ -319,9 +373,15 @@ function render(s){
     const bal = k.balance!=null ? fmtInt(k.balance) : '—';
     div.innerHTML='<div class="id">'+k.short+'…'+(k.is_voucher?'<span class="vchip">voucher</span>':'')+'</div>'+
       '<div><span class="wbal">'+bal+'</span><span class="wstat '+stat+'">'+stat+'</span></div>';
+    const cb=document.createElement('button');
+    cb.className='copybtn'; cb.type='button'; cb.title='Copy full address'; cb.dataset.title='Copy full address'; cb.innerHTML=COPY;
+    cb.onclick=()=>copyText(k.key,cb);
+    div.querySelector('.id').appendChild(cb);
     w.appendChild(div);
   });
   if(!(s.wallet||[]).length) w.innerHTML='<div class="row"><span class="k">No keys found</span></div>';
+
+  renderStanding(s.leaderboard);
 }
 
 function hexA(hex,a){const n=parseInt(hex.slice(1),16);return 'rgba('+((n>>16)&255)+','+((n>>8)&255)+','+(n&255)+','+a+')';}
@@ -395,8 +455,29 @@ function renderPeers(d){
   $('countries').innerHTML = top.length? 'By country: '+top.map(c=>c[0]+' ('+c[1]+')').join(' · ') : '';
 }
 
+function renderStanding(lb){
+  lastLB = lb || null;
+  const t=$('stText');
+  [...$('lbWin').children].forEach(b=>b.classList.toggle('on', b.dataset.w===lbWindow));
+  if(!lb || !Object.keys(lb).length){ t.textContent='checking leaderboard…'; return; }
+  const d=lb[lbWindow];
+  if(!d){ t.textContent='ranking unavailable'; return; }
+  if(!d.found){ t.innerHTML='not ranked yet <span style="opacity:.7">· '+fmtInt(d.total_peers)+' peers tracked</span>'; return; }
+  const flag=d.flag?d.flag+' ':'';
+  const loc=d.country_code?(flag+(countryName(d.country_code)||d.country_code)):(d.flag||'—');
+  const medal=d.medal?MEDALS[d.medal]+' ':'';
+  const S='<span class="sep">·</span>';
+  t.innerHTML='You: <b>'+loc+'</b>'+S+medal+'<b>#'+d.rank+'</b> of '+fmtInt(d.total_peers)+
+    S+'<b>Top '+d.top_pct+'%</b>'+S+d.uptime_pct+'% uptime'+S+d.hours+'h';
+  $('lbLink').title=(d.window_label||'')+(d.window_range?' · '+d.window_range:'');
+}
+
 window.addEventListener('resize',()=>{ if(map) map.invalidateSize(); });
 applyTheme(document.documentElement.getAttribute('data-theme')||'dark');
+$('peeridCopy').innerHTML=COPY;
+$('peeridCopy').dataset.title='Copy full peer ID';
+$('peeridCopy').onclick=()=>copyText(fullPeerId,$('peeridCopy'));
+$('lbWin').querySelectorAll('.wbtn').forEach(b=>{ b.onclick=()=>{ lbWindow=b.dataset.w; renderStanding(lastLB); }; });
 buildChips();
 getState(); getHistory(); getPeers();
 setInterval(getState,3000);

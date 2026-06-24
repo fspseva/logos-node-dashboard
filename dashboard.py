@@ -51,6 +51,15 @@ GENESIS = datetime.datetime(2026, 4, 13, 15, 19, 31,
 SLOT_DURATION = 1.0
 BOOTSTRAP_IPS = {"65.109.51.37"}
 
+# Global uptime leaderboard (leaderboard.logos.live) - we read the lightweight
+# source data files that power that site and look up this node's own peer_id.
+LEADERBOARD_WINDOWS = {
+    "7d": "https://raw.githubusercontent.com/tonicaginlinsky/logos-uptime-leaderboard/main/data/last-7-days.txt",
+    "30d": "https://raw.githubusercontent.com/tonicaginlinsky/logos-uptime-leaderboard/main/data/last-30-days.txt",
+}
+LEADERBOARD_URL = "https://leaderboard.logos.live"
+LEADERBOARD_REFRESH = 1800   # seconds between leaderboard refreshes (windows update slowly)
+
 os.makedirs(DATA_DIR, exist_ok=True)
 
 # ---------------------------------------------------------------------------
@@ -61,6 +70,7 @@ STATE = {"ts": 0, "node": {"reachable": False}, "sync": {}, "network": {},
 HISTORY = deque(maxlen=HISTORY_MAX)
 PEERS = {}            # ip -> {ip, lat, lon, country, city, isp, is_bootstrap, is_self}
 SELF_IP = None
+LEADERBOARD = {}      # window ("7d"/"30d") -> {found, rank, top_pct, uptime_pct, hours, flag, ...}
 LOCK = threading.Lock()
 
 # deltas for rate calculations
@@ -396,6 +406,75 @@ def load_state():
 
 
 # ---------------------------------------------------------------------------
+# Uptime leaderboard
+# ---------------------------------------------------------------------------
+def flag_to_iso(flag):
+    """Two regional-indicator symbols (e.g. 🇵🇹) -> ISO alpha-2 code ('PT')."""
+    try:
+        if flag and len(flag) >= 2:
+            a, b = ord(flag[0]) - 0x1F1E6, ord(flag[1]) - 0x1F1E6
+            if 0 <= a < 26 and 0 <= b < 26:
+                return chr(65 + a) + chr(65 + b)
+    except Exception:
+        pass
+    return None
+
+
+def parse_leaderboard(text, peer_id):
+    """Parse a leaderboard data file and extract this node's standing."""
+    out = {"found": False}
+    mt = re.search(r"(\d+)\s+peers seen", text)
+    out["total_peers"] = int(mt.group(1)) if mt else None
+    mw = re.search(r"—\s*(Last[^()]*?)\s*\((\d+)h", text)
+    out["window_label"] = mw.group(1).strip() if mw else None
+    out["window_hours"] = int(mw.group(2)) if mw else None
+    mr = re.search(r"^Window:\s*(.+?)\s*$", text, re.M)
+    out["window_range"] = mr.group(1).strip() if mr else None
+    if peer_id:
+        for line in text.splitlines():
+            if peer_id not in line:
+                continue
+            mm = re.search(r"(\d+)\s+" + re.escape(peer_id) + r"\s+(\d+)\s+([\d.]+)%", line)
+            if not mm:
+                continue
+            rank, hours, upct = int(mm.group(1)), int(mm.group(2)), float(mm.group(3))
+            fm = re.match(r"\s*([\U0001F1E6-\U0001F1FF]{2})", line)
+            flag = fm.group(1) if fm else None
+            medal = next((m for m, s in (("gold", "🥇"), ("silver", "🥈"),
+                                         ("bronze", "🥉")) if s in line), None)
+            out.update({"found": True, "rank": rank, "hours": hours,
+                        "uptime_pct": upct, "flag": flag,
+                        "country_code": flag_to_iso(flag), "medal": medal,
+                        "top_pct": round(100.0 * rank / out["total_peers"], 1)
+                        if out["total_peers"] else None})
+            break
+    return out
+
+
+def update_leaderboard(peer_id):
+    result = {}
+    for win, url in LEADERBOARD_WINDOWS.items():
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "logos-dashboard/1.0"})
+            with urllib.request.urlopen(req, timeout=15) as r:
+                txt = r.read().decode()
+            res = parse_leaderboard(txt, peer_id)
+            res["updated"] = time.time()
+            result[win] = res
+        except Exception as e:
+            log("leaderboard fetch failed", win, e)
+    if result:
+        with LOCK:
+            LEADERBOARD.clear()
+            LEADERBOARD.update(result)
+        seven = result.get("7d", {})
+        if seven.get("found"):
+            log("leaderboard: rank", seven["rank"], "of", seven["total_peers"],
+                "(top", str(seven["top_pct"]) + "%)")
+    return bool(result)
+
+
+# ---------------------------------------------------------------------------
 # Pollers
 # ---------------------------------------------------------------------------
 def poll_loop():
@@ -509,6 +588,7 @@ def peer_loop():
     discover_self_ip()
     if SELF_IP:
         geolocate([SELF_IP])
+    last_lb = 0
     while True:
         try:
             ips = scrape_peer_ips()
@@ -518,6 +598,14 @@ def peer_loop():
                 geolocate(new)
         except Exception as e:
             log("peer loop error:", e)
+        try:
+            if time.time() - last_lb > LEADERBOARD_REFRESH:
+                with LOCK:
+                    peer_id = STATE.get("network", {}).get("peer_id")
+                if peer_id and update_leaderboard(peer_id):
+                    last_lb = time.time()
+        except Exception as e:
+            log("leaderboard loop error:", e)
         time.sleep(PEER_INTERVAL)
 
 
@@ -551,7 +639,12 @@ class Handler(BaseHTTPRequestHandler):
             return self._serve_static("index.html")
         if path == "/api/state":
             with LOCK:
-                return self._send(200, dict(STATE))
+                st = dict(STATE)
+                st["leaderboard"] = dict(LEADERBOARD)
+            return self._send(200, st)
+        if path == "/api/leaderboard":
+            with LOCK:
+                return self._send(200, dict(LEADERBOARD))
         if path == "/api/history":
             with LOCK:
                 return self._send(200, list(HISTORY))
